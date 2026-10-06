@@ -1,6 +1,6 @@
 # The Endless Music Box, live for a room full of people
 
-This prompt aims at the [crit 9 brief, "All at once"](https://comp.anu.edu.au/courses/comp4020-agentic-coding-studio/crits/09-all-at-once/). It has two halves from two pod members, and the agent must deliver both: **(1)** the scroll becomes a shared sequencer grid, below, and **(2)** that grid becomes real-time, with one recorded multi-user decision, in the "Make it live" section after it. Where the two halves seem to disagree, "Make it live" wins, and it names the places where it overrides the grid half. At the next crit, five or six people will open <https://comp4020-riff8-baishi-1.fly.dev/> at once and draw, so the live half is what gets tested.
+This prompt aims at the [crit 9 brief, "All at once"](https://comp.anu.edu.au/courses/comp4020-agentic-coding-studio/crits/09-all-at-once/). It has three pieces from pod members, and the agent must deliver all of them: **(1)** the scroll becomes a shared sequencer grid, below, **(2)** that grid becomes real-time, with one recorded multi-user decision, in "Make it live", and **(3)** the page gets a new look — crumpled paper with a big trumpet blasting the sound out — in "The look", after that. Later sections win where pieces disagree, and each says so explicitly where it overrides an earlier one: "Make it live" overrides parts of "Part 1: the grid", and "The look" overrides "Make it live"'s instruction to keep the existing visual language. At the next crit, five or six people will open <https://comp4020-riff8-baishi-1.fly.dev/> at once and draw, so the live half is what gets tested hardest, but all three ship.
 
 ## Part 1: the grid
 
@@ -151,6 +151,44 @@ are in scope, because the crit 9 brief asks for them.
 - In a real browser, with two windows on the live Fly URL side by side: a mark drawn in one shows up in the other with no reload, and both windows drawing in the same layer at once keep their marks. Do this after the deploy, not just locally.
 - The existing rows on the Fly volume survive. Schema changes are additive.
 - `README.md` stops saying real-time is next crit's work and describes the claim behaviour, and `PROCESS.md` records why claims were chosen.
+
+## The look
+
+The page stops reading as a clean sparse scroll and becomes a scrunched-up
+piece of paper with the grid's drawings on it — creased, a little
+battered, not a flat rect. And a big trumpet, drawn large and prominent on
+the page, is what the sound comes out of: when the playhead plays a mark,
+something visibly bursts out of the trumpet's bell in time with it — a
+puff, a note glyph, a flare, whatever reads as "the sound is coming from
+here." This **overrides "Make it live"'s "keep to the page's existing
+visual language"** instruction (item 4 above) on purpose; everywhere else
+that item says, about claimed columns being felt rather than decorated,
+still holds.
+
+Two things this can't touch, because they're load-bearing, not decoration:
+
+- **The stored geometry never changes.** The crumple is a rendering
+  effect — a texture, a filter, a warped `<defs>` turbulence or a few
+  folded-paper shapes behind and around the ink — applied to how the page
+  *looks*, not to the coordinate system `d` paths are written in or
+  checked against. `zoneBounds` and the per-column containment math in
+  `src/lib/layout.ts` and `src/pages/api/strokes.ts` keep using the real,
+  unwarped coordinates. A mark's saved path is exactly what the visitor
+  drew; the paper around it is what's allowed to look crumpled.
+- **The drawing zones and the no-JS page still work.** The trumpet and the
+  paper texture are decorative: give them real `alt`/`aria-hidden` treatment
+  so they don't get read as content or block a column's hit area or
+  keyboard focus, and make sure they render as static art (no script
+  required) so `/` still answers 200 and looks like this with JavaScript
+  off — only the trumpet's burst-on-playback animation needs a script,
+  same as drawing and the live stream already do.
+
+Bring `README.md`'s aesthetic argument (the ink-wash references, "small on
+purpose") up to date to describe this look honestly rather than leave it
+describing a sparse scroll the page no longer is — the same rule this file
+has already applied to the real-time and grid changes: argue a changed
+decision in `README.md`, don't leave the file quietly contradicting what
+shipped.
 
 ## Process
 
