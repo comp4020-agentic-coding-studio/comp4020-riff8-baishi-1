@@ -1,4 +1,8 @@
-# The Endless Music Box
+# The Endless Music Box, live for a room full of people
+
+This prompt aims at the [crit 9 brief, "All at once"](https://comp.anu.edu.au/courses/comp4020-agentic-coding-studio/crits/09-all-at-once/). It has two halves from two pod members, and the agent must deliver both: **(1)** the scroll becomes a shared sequencer grid, below, and **(2)** that grid becomes real-time, with one recorded multi-user decision, in the "Make it live" section after it. Where the two halves seem to disagree, "Make it live" wins, and it names the places where it overrides the grid half. At the next crit, five or six people will open <https://comp4020-riff8-baishi-1.fly.dev/> at once and draw, so the live half is what gets tested.
+
+## Part 1: the grid
 
 The Scroll stops being continuous ink and becomes a shared sequencer-style
 grid. Two stacked grids/layers share the same columns: a column is one
@@ -46,9 +50,8 @@ once. Same standing decision as before: user-triggered by a real button,
 never autoplaying, local to whoever pressed play, not synced across
 visitors — that's still a bigger decision for later, named below.
 
-The page still polls periodically for marks other visitors have saved, so
-the grid visibly grows without a manual reload — plain polling against the
-existing data, nothing new added to make that happen.
+Other visitors' marks arrive live, as described in "Make it live" below. This
+replaces the polling this half originally proposed.
 
 ## What carries over unchanged
 
@@ -69,7 +72,7 @@ existing data, nothing new added to make that happen.
   `src/lib/layout.ts` is where that lives today and needs a layer
   dimension, not a rewrite of the idea.
 - `/` still answers 200 with JavaScript disabled and still renders the grid
-  and every existing mark. Only drawing, the live poll, and playback need a
+  and every existing mark. Only drawing, the live stream, and playback need a
   script.
 - Each layer's open column stays a real focusable control: Enter/Space
   still leaves a dot — a short, staccato mark by the shape rules above, at
@@ -99,13 +102,13 @@ existing data, nothing new added to make that happen.
   Leave the opening block above "## What the app must never do" exactly as
   it is — that's the riff process itself, not this brief.
 - `CLAUDE.md`'s "Left open on purpose" section currently says real-time
-  sync is next crit's scope, full stop. This brief pulls one narrow piece
-  of that forward on purpose — polling for marks other visitors saved.
-  That sentence has to be edited to say so explicitly: name what's now in
-  (plain polling against existing data) and what's still out (push-based
-  updates, a synced playhead, anything needing a second service), with the
-  reasoning recorded, not left to quietly contradict a rule still sitting
-  in the file.
+  sync and multi-user identity are next crit's scope. This is that crit.
+  Edit the section to say what is now in (server-sent events from the
+  existing server, in-memory claims on a column, an anonymous per-tab
+  token at most) and what is still out (a synced or shared playhead, "one
+  mark per visitor" enforcement, accounts, anything needing a second
+  service), with the reasoning recorded, not left to quietly contradict a
+  rule still sitting in the file.
 - Say in `PROCESS.md` why this pivot happened and what it cost, the way the
   existing entries do — grid over continuous scroll, shape read off the
   stored path rather than a new column, synthesis over sample libraries,
@@ -127,12 +130,27 @@ existing data, nothing new added to make that happen.
 
 ## Left open on purpose
 
-Per-visitor identity, enforcing "one mark per visitor," and a synced or
-shared playhead are not gaps in this brief — they're the next crit's
-decision to make, same as the current `README.md` already says for
-identity. Don't build toward any of them early; a half-built version of a
-decision someone else is supposed to make and write down is worse than not
-touching it.
+Enforcing "one mark per visitor," accounts, and a synced or shared
+playhead are not part of this crit. Don't build toward them; a half-built
+version of a decision someone else is supposed to make and write down is
+worse than not touching it. Real-time marks and the column decision below
+are in scope, because the crit 9 brief asks for them.
+
+## Make it live
+
+1. **Real-time.** When anyone saves a mark, every other open tab shows it within about a second with no reload: the mark appears in the right column of the right layer, and each layer's open column and the grid's width update with it. Use server-sent events from the existing Astro node server. Send a heartbeat so Fly's proxy doesn't drop idle streams, keep connection state in memory (the machine is 256 MB and auto-stops), and make a reconnect, or a restart of the machine, catch up on marks missed by sending the last seen mark `id`. If a playhead is running locally, a new mark must not reset it.
+2. **One multi-user decision, recorded before it's built: who gets the open column.** Right now everyone loads the page and is offered the same blank column in a layer, and whoever saves second is refused with a 409 and told to reload. With six people drawing at once, most would lose their mark. **The pod's decision is claim on pointer-down.** Starting to draw in a layer's open column reserves that column in that layer, and every other tab immediately sees it as taken ("someone is drawing here") and gets the next column. The claim expires if abandoned. Claims are short-lived, so hold them in server memory, not in a second table. Layers are independent, so someone drawing in the top grid doesn't block anyone in the bottom grid. Write the ADR at `docs/decisions/0001-who-gets-the-column.md`: weigh claim-on-pointer-down honestly against live shift (a saved mark pushes the open column right in every other tab, and half-drawn strokes are translated or dropped) and reserve-per-session (each tab is given a column ahead of time, leaving gaps when people leave). Include the strongest case for live shift, since the pod will argue it at the crit, and the cost of choosing claims (a stuck claim holding a column until the timeout, a timeout that is too short or too long, claims lost on restart). Only choose differently if you find a concrete reason claims can't work on this stack, and say what it was in the ADR. Commit the ADR before the code that implements it.
+3. **The server stays the authority.** A claim is checked in the data layer, not trusted from the client. A save for a column claimed by someone else is refused, and a save with no claim, or an expired one, still works when the column is free. Use an anonymous per-tab token to say who holds a claim, as `CLAUDE.md` allows, and never a login. The per-column zone check (`zoneBounds`) and the server-derived layer stay in force.
+4. **Felt, not decorated.** In a room, the other people drawing should be felt: a taken column should look taken, and a mark that arrives should visibly land in place. Keep to the page's existing visual language. No cursors, avatars or names.
+
+### What good looks like for this half
+
+- A new spec opens the live stream, POSTs a valid mark from a second client, and asserts the stream delivers it in under 1 s.
+- Specs that pin the claim decision: two clients drawing in the same layer at once both get their marks saved in different columns, a save into a column someone else holds is refused, and a column whose claim has expired is free again. Make the claim timeout configurable by an environment variable, so a spec can use a short one.
+- `spec/invariants.test.ts` stays green and untouched. Update `spec/scroll.test.ts` where the stale-column refusal changes.
+- In a real browser, with two windows on the live Fly URL side by side: a mark drawn in one shows up in the other with no reload, and both windows drawing in the same layer at once keep their marks. Do this after the deploy, not just locally.
+- The existing rows on the Fly volume survive. Schema changes are additive.
+- `README.md` stops saying real-time is next crit's work and describes the claim behaviour, and `PROCESS.md` records why claims were chosen.
 
 ## Process
 
