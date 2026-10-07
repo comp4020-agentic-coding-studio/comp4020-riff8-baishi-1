@@ -187,5 +187,22 @@ export function initBox(root: Document): Box | null {
   });
 
   box.layout();
+  showOpenColumns(svg, "instant");
   return box;
+}
+
+// Scrolls the sheet so both layers' open columns are in view (the leftmost
+// of the two, if they can't both fit), the way the old scroll opened at its
+// blank strip.
+export function showOpenColumns(svg: SVGSVGElement, behavior: ScrollBehavior): void {
+  const wrap = svg.parentElement;
+  if (!wrap) return;
+  const xs = ["top", "bottom"].map((layer) =>
+    Number(svg.querySelector(`.zone-${layer} .zone-hit`)?.getAttribute("x") ?? 0),
+  );
+  const scale = svg.getBoundingClientRect().width / Number(svg.getAttribute("width"));
+  const left = Math.min(...xs) * scale;
+  const right = (Math.max(...xs) + COL) * scale;
+  const target = right - left <= wrap.clientWidth ? right - wrap.clientWidth + COL * scale : left - COL * scale;
+  wrap.scrollTo({ left: Math.max(0, target), behavior });
 }

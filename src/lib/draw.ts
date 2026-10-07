@@ -6,7 +6,7 @@
 // Pointer-down claims the column first (docs/decisions/0001-who-gets-the-
 // column.md), so every other tab moves its own open column along before the
 // stroke is even finished.
-import type { Box } from "./box";
+import { type Box, showOpenColumns } from "./box";
 import { COL, defaultY, type Instrument, isInstrument, type Layer, SOFT_SPREAD } from "./layout";
 
 interface Point {
@@ -189,6 +189,7 @@ function initLayer(box: Box, layer: Layer, busy: { now: boolean }): void {
         const saved = await res.json();
         box.addMark({ ...saved, instrument }, false);
         end(`saved in column ${saved.col + 1}. ${box.marks.size} marks in the grid so far.`);
+        showOpenColumns(svg, "smooth");
         return;
       } catch (err) {
         end(`couldn't save your mark (${(err as Error).message}). Try again.`);

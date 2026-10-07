@@ -439,12 +439,10 @@ h1 {
 }
 
 .zone-prompt {
-  /* Full-strength accent, not dimmed further: at 0.7 opacity this composited
-     to 2.86:1 against .paper in light mode — a real AA failure axe's own
-     sweep can't see, since it reports "incomplete" for any SVG text/shape
-     contrast rather than measuring it. Measured by hand instead (see
-     PROCESS.md). */
-  fill: var(--accent);
+  /* --link, not --accent: --accent measured 4.3:1 on flat paper, and the
+     crumple lighting darkens the paper a little further. axe can't measure
+     SVG text, so this is by hand (see PROCESS.md). */
+  fill: var(--link);
   font-size: 1.1rem;
   font-style: italic;
   text-anchor: middle;
@@ -496,5 +494,13 @@ h1 {
     --i-drums: #d8b48a;
     --i-electro: #78d0a8;
     --i-vocal: #f08cc0;
+  }
+
+  .fold-shadow {
+    stroke: rgb(0 0 0 / 45%);
+  }
+
+  .fold-light {
+    stroke: rgb(255 255 255 / 9%);
   }
 }
