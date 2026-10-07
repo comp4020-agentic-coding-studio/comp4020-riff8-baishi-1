@@ -120,10 +120,74 @@ and in-range dependency patches. Some checks came back clean and changed
 nothing: dark-mode contrast, 200% zoom, and an `html-validate` warning I
 confirmed is the tool contradicting its own rules.
 
+## Crit 9: from a scroll to a music box
+
+This round ran from a pod's prompt rather than my own plan: one unattended
+run, three pieces from three pod members, all of which had to ship. The
+scroll becomes a shared sequencer grid, the grid goes live with one recorded
+multi-user decision, and the page takes on a new look.
+
+**Why the pivot.** A continuous scroll gave six people in a room nothing to
+do together except take turns, and nothing to listen to. A grid whose
+columns are beats gives every mark a place relative to everyone else's, and
+two layers that share columns mean a drum hit and a note drawn by different
+people can land on the same beat. What it cost: the "one strip, one mark"
+simplicity, and the old marks' place in the main sheet. They had no
+instrument, so rather than invent one they stay as a silent prologue under
+the grid, coordinates untouched. The schema change is additive: `PRAGMA
+table_info`, then `ALTER TABLE ADD COLUMN` for `instrument` and `col`, so
+the rows on the Fly volume survive.
+
+**Shape read off the path, not stored.** The prompt asked for sound shaped
+by the stroke (dot, held note, rise, fall, trill, loop). That reads off the
+`d` already saved, client-side at playback (`src/lib/shape.ts`), so the
+sound can never disagree with the ink, and a better classifier later
+re-voices every old mark for free. The cost is that two people's browsers
+could hear the same mark slightly differently if the code changes between
+their loads. The classifier is a pure function, so unlike the audio it has
+a spec (`spec/shape.test.ts`).
+
+**Synthesis over samples.** Every instrument is a few Web Audio oscillators,
+a noise buffer and a filter (`src/lib/audio.ts`). A sample library would
+sound richer, but it's megabytes to serve from a 256 MB machine, licensing
+to check, and a fetch before the first note. A synthesized "piano" is
+honest about being a sketch of one, which suits a crumpled paper music box.
+
+**Claims, and the stream.** The pod chose claim on pointer-down, and I wrote
+the ADR before the code
+([`07dbcb2`](https://github.com/comp4020-agentic-coding-studio/comp4020-riff8-baishi-1/commit/07dbcb2)), including the best case for live shift since the
+pod will argue it. Claims live in a `Map`; server-sent events come from the
+same Node process, with a heartbeat for Fly's proxy and replay by last
+mark id, so a reconnect or a machine restart misses nothing
+([`179c65f`](https://github.com/comp4020-agentic-coding-studio/comp4020-riff8-baishi-1/commit/179c65f)). The playhead stays local to each tab: a shared
+one is a bigger decision than this round should make in passing.
+
+Building it corrected the ADR. My first rule let a save with no claim land
+only in the layer's open column. The expiry spec failed against it: an
+expired claim's stroke was refused because another lapsed claim had opened
+an earlier gap meanwhile. A free column is now anyone's, capped at eight
+past the furthest mark or claim so nobody can stretch the grid, and the ADR
+says why it changed.
+
+**Verified in a real browser, not just in `spec/`.** Two tabs on the CI
+container: tab 1 held a stroke mid-drag while tab 2 drew in the same layer;
+both marks saved in different columns and each tab saw the other's land
+without a reload. With an analyser spliced in front of the speakers, a
+rising flute line climbed from 574 to 891 Hz, a falling one fell from about
+1055 to 662 Hz, a zigzag alternated between 879 and 1043 Hz, and a long
+drum stroke booked three hits where a dot booked one. A mark arriving
+mid-playback didn't reset the playhead. None of that has a spec: Web Audio,
+pointer capture and playhead timing don't run under vitest, the same call
+this file makes for the pointer-identity bug. Two fixes came from looking
+rather than testing: the sheet opened scrolled to column 0, hiding the open
+column on any grid wider than the screen, and the crumple lighting had
+darkened the paper behind "draw here", so its ink moved to `--link`, which
+measured 5.05:1 at worst against sampled pixels
+([`58f4a4f`](https://github.com/comp4020-agentic-coding-studio/comp4020-riff8-baishi-1/commit/58f4a4f)).
+
 ## What's still open
 
-Real-time sync, identity and "one mark per visitor" are next crits' scope,
-named in `README.md`, not gaps I missed. The shared-strip refusal is a
-stopgap that crit 9's concurrency decision should replace. If that decision
-needs more than one table, the no-ORM choice above gets revisited in
-writing.
+A shared playhead, enforcing "one mark per visitor" and accounts are
+deliberately not built; `README.md` and `CLAUDE.md` say why. Claims are
+lost on a restart, which the save path tolerates rather than prevents. The
+crit's real test, six phones at once on the live URL, happens in the room.

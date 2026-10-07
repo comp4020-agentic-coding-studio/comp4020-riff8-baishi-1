@@ -94,7 +94,12 @@ The server stays the authority (`src/pages/api/strokes.ts`):
 
 - a save into a column held by someone else's live claim is refused
 - a save with no claim, or an expired one, is accepted when the column is
-  the layer's open one
+  free (no mark, nobody else's live claim) and no more than eight columns
+  past the furthest mark or claim in its layer, so nobody can stretch the
+  grid. The first draft of this ADR said "only the layer's open column";
+  building it showed that refuses an expired claim's stroke whenever an
+  earlier gap has opened up meanwhile, which breaks the promise that a
+  stroke in flight across a lapse still lands
 - layer is always derived from the instrument on the server, and the
   per-column `zoneBounds` check still applies to every save
 

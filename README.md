@@ -1,65 +1,90 @@
-# The Scroll
+# The Endless Music Box
 
-A shared ink drawing that only ever grows. Visit, and there's a blank strip
-waiting at the right-hand edge of whatever everyone before you has drawn.
-Leave one mark there — a line, a dot, whatever the brush does under your
-hand — and it's part of the scroll from then on. Nobody can undo it,
-including you.
+A shared music box drawn on a crumpled sheet of paper. Two grids share the
+same columns: the top one is melodic, with eight pitch rows, and the bottom
+one is percussive. A column is one beat in both. Pick an instrument, draw
+one mark in a grid's open column, and it's part of the music from then on.
+Nobody can undo it, including you. Press play and a playhead walks the
+columns one beat at a time, and the sound blasts out of a big brass trumpet
+at the side of the sheet.
+
+It began as The Scroll, a single strip of ink that only grew. Its first
+marks are still there, kept exactly as drawn under the grid, and silent.
 
 ## What good means here
 
-Good, for this app, means **small on purpose**. Not small because it isn't
-finished yet, but small as the actual design: one shared surface, one mark
-per visit, nothing that scales past what a single SQLite file and a single
-small machine can hold. Three things I read while deciding what that should
-look like:
+Good, for this app, still means **small on purpose**: one shared surface,
+one SQLite file, one small machine, nothing that scales past what those can
+hold. Three things I read while deciding what that should look like:
 
 - Robin Sloan's
   [_An app can be a home-cooked meal_](https://www.robinsloan.com/notes/home-cooked-app/)
-  argues that software built for a small, specific, known use doesn't need
-  the affordances — accounts, growth, retention — that software built to
-  scale needs. The Scroll has no login and no notion of "your" marks once
-  they're made, because nothing here is trying to bring you back for a
-  streak.
+  argues that software built for a small, known use doesn't need accounts,
+  growth or retention. The music box has no login and no notion of "your"
+  marks once they're made.
 - Ben Hoyt's [_The small web is beautiful_](https://benhoyt.com/writings/the-small-web-is-beautiful/)
-  argues for fewer moving parts as a virtue in itself, not just a
-  constraint: one table, one process, one file on one volume. There's no
-  queue, no cache, no second service.
+  argues for fewer moving parts as a virtue in itself. Real-time arrives
+  without a second service: the same Node process that saves a mark streams
+  it to every open tab.
 - Hundred Rabbits'
   [description of their own practice](https://sourcehut.org/blog/2021-12-08-100-rabbits-interview/) —
-  "if we can use less technology to solve any one task, we will" — is the
-  standard I held the drawing itself to: one SVG path per mark, one write,
-  no client-side framework.
+  "if we can use less technology to solve any one task, we will" — is why
+  every sound is synthesized in the browser rather than fetched from a
+  sample library, and why how a mark sounds is read off the shape already
+  saved rather than stored beside it.
 
-What's **enforced**: a mark, once saved, is never edited or deleted (there
-is no code path that can — see `CLAUDE.md`), and nor can a later one paint
-over it, since every mark has to stay inside its own strip, soft edge and
-all; every write is validated server-side regardless of what the client
-sends (`spec/scroll.test.ts`); the page that shows the scroll works without
-JavaScript, since drawing is the only part that genuinely needs a script;
-and drawing itself doesn't require a pointer — the zone is a real focusable
-control, and Enter or Space leaves a dot at its centre, the same shape a
-stationary tap already produces.
+## How a mark sounds
 
-What's **judged, not enforced**: nothing stops a visitor from reloading and
-drawing a second mark, or a tenth. Enforcing "one mark per person" needs a
-real notion of a person, which is next crit's job (multi-user identity, [All
-at once](https://comp.anu.edu.au/courses/comp4020-agentic-coding-studio/crits/09-all-at-once/)).
-Two visitors who load the page at the same moment are offered the same blank
-strip; whoever saves second is told to reload and draw in the next one,
-rather than drawing on top of the first. Refusing is the honest stopgap
-until then. For now the scroll trusts you the way a paper one would: nothing
-stops you picking up the brush twice, and not doing so is part of what the
-piece asks of you.
+Colour chooses the instrument: Piano, Strings, Flute, Bass or Synth in the
+top grid, Drum Kit, Electronic Beat or a vocal chop in the bottom. Height in
+the top grid is pitch. The shape decides the rest. A dot is a short,
+staccato note and a long horizontal stroke is held. A rising line rises in
+pitch and a falling one falls. A zigzag trills, and a loop repeats inside
+its beat. In the bottom grid a dot is one hit, a long stroke a run of hits
+across the beat, a zigzag a roll, and how high each part is drawn picks
+kick, snare or hi-hat.
 
-What I deliberately **didn't build**: accounts, undo, a gallery of past
-scrolls, likes, moderation tooling. Ink-wash painting tolerates the mark
-that goes wrong, and a scroll that lets you take back a bad stroke stops
-being a record of what actually happened.
+## All at once
 
-## What's here now
+When anyone saves a mark, every other open tab sees it land within about a
+second, no reload. When someone presses down in a grid's open column, that
+column is theirs while they draw: every other tab sees it hatched as
+"someone is drawing here" and is offered the next column instead, so six
+people drawing at once all keep their marks. A claim is let go when the
+mark saves, or after ten seconds of silence if the drawer walks away. The
+reasoning, and the case for the alternatives, is in
+[`docs/decisions/0001-who-gets-the-column.md`](docs/decisions/0001-who-gets-the-column.md).
 
-The core interaction only: one growing SVG scroll, one `strokes` table, one
-write path. It's one visitor's experience end to end — draw, reload, find
-your mark still there — not yet the live one several people in the room at
-once will get. That's next crit's work.
+## What's enforced, and what's judged
+
+What's **enforced**, on the server: a mark, once saved, is never edited or
+deleted, and nor can a later one paint over it, since every mark has to stay
+inside its own column of its own layer, soft edge and all. The server
+decides the layer from the instrument; a client can't say otherwise. A
+column someone else has claimed can't be saved into. The page that shows the
+grid works without JavaScript, and drawing doesn't need a pointer: each open
+column is a real control, and Enter or Space leaves a dot. All of this is
+checked over HTTP in `spec/`.
+
+What's **judged, not enforced**: nothing stops a visitor drawing a second
+mark, or a tenth. Enforcing "one mark per person" needs a real notion of a
+person, which this app deliberately doesn't have; an anonymous per-tab token
+says who holds a claim, and nothing more. The music box trusts you the way a
+paper one would.
+
+## The look
+
+The sheet is crumpled now: creased and lit unevenly, with a battered edge,
+like paper that's been carried around in a pocket. Ink-wash painting
+tolerates the mark that goes wrong, and so does a scrunched-up sheet; neither
+pretends to be pristine. The crumple is only how the paper is drawn. Every
+mark is saved and checked in flat coordinates, and the trumpet and the
+creases are decoration, hidden from assistive tech.
+
+## What I deliberately didn't build
+
+The playhead is yours alone: pressing play starts it for you, not for the
+room. A shared playhead is a bigger decision (whose tempo, who can stop it)
+than this round should make in passing. Also not here: accounts, undo,
+moderation, likes, a gallery of past sheets, or anything needing a second
+service.

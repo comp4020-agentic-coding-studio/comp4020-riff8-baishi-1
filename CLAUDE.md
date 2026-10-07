@@ -46,43 +46,56 @@ in either.
   a mark ever needs removing, that's a decision to argue for in
   `README.md` first, with a real mechanism (who can, and why), not a quiet
   admin route. Overpainting is erasing too: a new mark's path, halo
-  included, stays inside its own zone (`zoneBounds` in `src/lib/layout.ts`).
-- **Never require an account to draw or to view.** Identity, when it
-  arrives (crit 9), should be the minimum that makes "multi-user" true —
-  an anonymous per-visit token at most — never a login.
-- **Never trust the client for anything `spec/` can check.** Path length,
-  stroke width, request shape: validate in the data layer
-  (`src/pages/api/strokes.ts`), the same place the promise is tested, not
-  just in `draw.ts`.
+  included, stays inside its own column of its own layer (`zoneBounds` in
+  `src/lib/layout.ts`).
+- **Never require an account to draw or to view.** The only identity is an
+  anonymous per-tab token that says who holds a claim — never a login, and
+  never broadcast.
+- **Never trust the client for anything `spec/` can check.** Path shape,
+  stroke width, instrument, column containment and claims are all checked
+  in the data layer (`src/pages/api/strokes.ts`). The client sends
+  `{ d, width, instrument }`; the server derives the layer from the
+  instrument (`layerOf`) and the column from the path, and ignores anything
+  else the body says about either.
+- **Never change the stored geometry for the sake of the look.** The
+  crumpled paper is a rendering effect behind the ink; marks are drawn and
+  checked in flat coordinates.
 
 ## What every page holds to
 
-- The page that shows the scroll (`/`) must render the existing marks and
-  answer 200 with JavaScript disabled. Only the act of drawing needs a
-  script — and within that, a pointer is never the only way in: the
-  drawing zone is a real focusable control, not just a hit-tested shape,
-  so Enter/Space works wherever a pointer does.
+- `/` renders the grid and every saved mark (the old scroll's rows as the
+  prologue) and answers 200 with JavaScript disabled. Only drawing, the
+  live stream and playback need a script, and the trumpet and paper are
+  `aria-hidden` static art. A pointer is never the only way in: each open
+  column is a real focusable control, and Enter/Space leaves a dot.
 - `/readme/` always serves the current `README.md` in full, headings
   intact — `spec/invariants.test.ts` checks this; don't special-case it
   away.
 
 ## What a change must not break
 
-- One SQLite table, one file, one volume. If a change needs a second
-  service (a queue, a cache, a second database), that's a bigger decision
-  than this file should wave through — raise it in `PROCESS.md` first,
-  with the trade-off named.
+- One SQLite table, one file, one volume. Schema changes are additive and
+  check `PRAGMA table_info` first: the Fly volume holds rows from every
+  earlier schema. Claims and live-stream subscribers live in server memory
+  on purpose; if a change needs a second service (a queue, a cache, a
+  second database), raise it in `PROCESS.md` first, with the trade-off
+  named.
 - `pnpm check` and `pnpm check:evidence` pass before every commit. A red
   run never gets committed over.
 - Every commit that changes behaviour has a test in `spec/` that would have
-  failed without it, where the behaviour is the kind a test can hold —
-  see `spec/scroll.test.ts` for the shape (persistence, validation,
-  no-delete) established this crit.
+  failed without it, where the behaviour is the kind a test can hold. HTTP
+  behaviour (persistence, validation, claims, the stream) and the pure
+  shape classifier can; how an instrument sounds, playhead timing and
+  pointer handling can't, and get a real-browser check instead.
 
-## Left open on purpose
+## Settled, and left open on purpose
 
-Real-time sync, multi-user identity and rate-limiting "one mark per
-visitor" are not bugs to fix — they're next crits' scope, named as such in
-`README.md`. Don't build ahead of the crit that's supposed to decide them;
-a premature real-time layer built without the decision `README.md`
-promises to record is exactly the kind of process the brief marks down.
+In, as of crit 9: marks arrive live over server-sent events from the
+existing server; who gets the open column is decided by claim on
+pointer-down (`docs/decisions/0001-who-gets-the-column.md`), with claims
+held in memory and expiring after `CLAIM_TTL_MS`.
+
+Still out, and not bugs to fix: a synced or shared playhead, enforcing "one
+mark per visitor", accounts, and anything needing a second service. Each is
+a decision someone should make and record in `README.md` before it's
+built; a half-built version of one is worse than none.
