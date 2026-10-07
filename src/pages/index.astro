@@ -1,21 +1,65 @@
 ---
 import "../styles/global.css";
-import { getAllStrokes } from "../lib/db";
-import { HEIGHT, SEGMENT, SOFT_SPREAD, totalWidth, zoneStart } from "../lib/layout";
+import { publicClaims } from "../lib/claims";
+import { getAllStrokes, occupiedColumns } from "../lib/db";
+import {
+  COL,
+  HEIGHT,
+  INSTRUMENTS,
+  type Instrument,
+  type Layer,
+  LAYERS,
+  openColumn,
+  ROW_H,
+  SOFT_SPREAD,
+  totalWidth,
+} from "../lib/layout";
 
 const strokes = getAllStrokes();
-const count = strokes.length;
-const width = totalWidth(count);
-const zoneX = zoneStart(count);
+const prologue = strokes.filter((s) => s.instrument === null);
+const grid = strokes.filter((s) => s.instrument !== null && s.col !== null);
+const occupied = occupiedColumns();
+const claims = publicClaims();
+const claimed = (layer: Layer): number[] => claims.filter((c) => c.layer === layer).map((c) => c.col);
+const open: Record<Layer, number> = {
+  top: openColumn(occupied.top, claimed("top")),
+  bottom: openColumn(occupied.bottom, claimed("bottom")),
+};
+const columns = Math.max(
+  open.top + 1,
+  open.bottom + 1,
+  ...grid.map((s) => (s.col as number) + 1),
+  ...claims.map((c) => c.col + 1),
+);
+const width = totalWidth(columns);
+const lastId = strokes.length > 0 ? strokes[strokes.length - 1].id : 0;
+const layers: Layer[] = ["top", "bottom"];
+const byLayer = (layer: Layer): Instrument[] =>
+  (Object.keys(INSTRUMENTS) as Instrument[]).filter((k) => INSTRUMENTS[k].layer === layer);
 
 const since =
-  count > 0
-    ? new Date(strokes[0].createdAt).toLocaleDateString("en-AU", {
+  grid.length > 0
+    ? new Date(grid[0].createdAt).toLocaleDateString("en-AU", {
         year: "numeric",
         month: "long",
         day: "numeric",
       })
     : null;
+
+// The continuous scroll's marks, kept as they were drawn: its own small
+// sheet, viewed at a fraction of its size. Their coordinates are untouched.
+const PROLOGUE_START = 1060;
+const prologueWidth = 1200 + prologue.length * 280 + 20 - PROLOGUE_START;
+
+// A few creases across each sheet's worth of paper, the same every load.
+const FOLD_TILE = 840;
+const folds = [
+  [0, 40, 840, 210],
+  [120, 0, 300, HEIGHT],
+  [520, 0, 610, HEIGHT],
+  [0, 330, 840, 260],
+  [700, 0, 560, HEIGHT],
+];
 ---
 
 <!doctype html>
@@ -23,81 +67,249 @@ const since =
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>The Scroll</title>
+    <title>The Endless Music Box</title>
     <meta
       name="description"
-      content="A shared ink scroll that only ever grows: one mark per visit, none of them ever erased."
+      content="A shared music box drawn on crumpled paper: pick an instrument, draw one mark in the open column, and everyone in the room hears it. Nothing is ever erased."
     />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   </head>
   <body>
     <header>
-      <h1>The Scroll</h1>
+      <h1>The Endless Music Box</h1>
       <p class="tagline">
-        One mark, then it stays. <a href="/readme/">What this is, and why</a>.
+        One mark per column, nobody's ever erased, and everyone here draws on the same sheet.{" "}
+        <a href="/readme/">What this is, and why</a>.
       </p>
     </header>
 
     <main>
-      <div id="canvas-wrap">
-        <svg
-          id="scroll"
-          viewBox={`0 0 ${width} ${HEIGHT}`}
-          width={width}
-          height={HEIGHT}
-          aria-label={`A shared ink scroll of ${count} mark${count === 1 ? "" : "s"} left so far, with a blank space at the end for yours`}
-        >
-          <rect x="0" y="0" width={width} height={HEIGHT} class="paper" />
+      <div class="stage">
+        <div class="trumpet-wrap" aria-hidden="true">
+          <svg class="trumpet" viewBox="0 0 320 150" focusable="false">
+            <defs>
+              <linearGradient id="brass" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#f7dc8a" />
+                <stop offset="0.45" stop-color="#d9a53a" />
+                <stop offset="1" stop-color="#8f6418" />
+              </linearGradient>
+            </defs>
+            <g class="brass" fill="url(#brass)" stroke="#5e420e" stroke-width="2" stroke-linejoin="round">
+              <path d="M 88 74 C 44 74, 44 124, 88 124 L 196 124 C 232 124, 232 92, 200 84" fill="none" stroke="url(#brass)" stroke-width="13" />
+              <path d="M 88 74 C 44 74, 44 124, 88 124 L 196 124 C 232 124, 232 92, 200 84" fill="none" stroke="#5e420e" stroke-width="1" />
+              <path d="M 6 63 L 20 69 L 32 69 L 32 79 L 20 79 L 6 85 Z" />
+              <rect x="30" y="67" width="178" height="14" rx="7" />
+              <path d="M 204 66 C 248 64, 276 42, 312 14 L 312 134 C 276 106, 248 84, 204 82 Z" />
+              <ellipse cx="312" cy="74" rx="7" ry="60" />
+              {
+                [100, 130, 160].map((x) => (
+                  <g>
+                    <rect x={x} y="40" width="20" height="66" rx="4" />
+                    <rect x={x + 7} y="24" width="6" height="18" />
+                    <ellipse cx={x + 10} cy="22" rx="10" ry="4" />
+                  </g>
+                ))
+              }
+            </g>
+            <ellipse class="bell-glow" cx="312" cy="74" rx="7" ry="58" />
+          </svg>
+          <div id="bursts" class="bursts"></div>
+        </div>
 
-          {
-            strokes.map((s) => (
-              <>
-                <path d={s.d} class="ink-soft" stroke-width={s.width * SOFT_SPREAD} />
-                <path d={s.d} class="ink" stroke-width={s.width} />
-              </>
-            ))
-          }
+        <div class="sheet-shadow">
+        <div class="sheet">
+          <div id="canvas-wrap">
+            <svg
+              id="grid"
+              viewBox={`0 0 ${width} ${HEIGHT}`}
+              width={width}
+              height={HEIGHT}
+              data-last-id={lastId}
+              data-open-top={open.top}
+              data-open-bottom={open.bottom}
+              aria-label={`A shared music box of ${grid.length} mark${grid.length === 1 ? "" : "s"}: a melodic grid on top, a percussive grid below, with an open column in each for yours`}
+            >
+              <defs>
+                <filter id="crumple" x="0" y="0" width="1" height="1">
+                  <feTurbulence type="fractalNoise" baseFrequency="0.011 0.017" numOctaves="4" seed="11" result="noise" />
+                  <feDiffuseLighting in="noise" surfaceScale="7" diffuseConstant="1.1" lighting-color="#fff" result="light">
+                    <feDistantLight azimuth="235" elevation="52" />
+                  </feDiffuseLighting>
+                  <feComposite in="light" in2="SourceGraphic" operator="arithmetic" k1="0.8" k2="0" k3="0.28" k4="0" />
+                </filter>
+                <pattern id="folds" patternUnits="userSpaceOnUse" width={FOLD_TILE} height={HEIGHT}>
+                  {
+                    folds.map(([x1, y1, x2, y2]) => (
+                      <>
+                        <line x1={x1} y1={y1} x2={x2} y2={y2} class="fold-shadow" />
+                        <line x1={x1 + 1.5} y1={y1 + 1} x2={x2 + 1.5} y2={y2 + 1} class="fold-light" />
+                      </>
+                    ))
+                  }
+                </pattern>
+                <pattern id="rows" patternUnits="userSpaceOnUse" x="0" y={LAYERS.top.y} width={COL} height={ROW_H}>
+                  <path d={`M 0 0 L ${COL} 0 M 0 0 L 0 ${ROW_H}`} class="gridline" />
+                </pattern>
+                <pattern id="beats" patternUnits="userSpaceOnUse" x="0" y={LAYERS.bottom.y} width={COL} height={LAYERS.bottom.height / 3}>
+                  <path d={`M 0 0 L ${COL} 0`} class="gridline faint" />
+                  <path d={`M 0 0 L 0 ${LAYERS.bottom.height / 3}`} class="gridline" />
+                </pattern>
+                <pattern id="hatch" patternUnits="userSpaceOnUse" width="10" height="10" patternTransform="rotate(45)">
+                  <line x1="0" y1="0" x2="0" y2="10" class="hatch-line" />
+                </pattern>
+              </defs>
 
-          <rect
-            id="zone-outline"
-            x={zoneX + 4}
-            y="4"
-            width={SEGMENT - 8}
-            height={HEIGHT - 8}
-            class="zone-outline"
-          />
-          <text id="zone-prompt" x={zoneX + SEGMENT / 2} y={HEIGHT / 2} class="zone-prompt">
-            draw here
-          </text>
-          <path id="preview" d="" class="ink" />
-          <rect
-            id="zone-hit"
-            x={zoneX}
-            y="0"
-            width={SEGMENT}
-            height={HEIGHT}
-            class="zone-hit"
-            tabindex="0"
-            role="button"
-            aria-label="Draw your mark here: drag with a pointer, or press Enter or Space to leave a dot"
-          />
-        </svg>
+              <g aria-hidden="true">
+                <rect class="paper js-width" x="0" y="0" width={width} height={HEIGHT} filter="url(#crumple)" />
+                <rect class="js-width" x="0" y="0" width={width} height={HEIGHT} fill="url(#folds)" />
+                {
+                  layers.map((layer) => (
+                    <rect
+                      class={`layer layer-${layer} js-width`}
+                      x="0"
+                      y={LAYERS[layer].y}
+                      width={width}
+                      height={LAYERS[layer].height}
+                      fill={layer === "top" ? "url(#rows)" : "url(#beats)"}
+                    />
+                  ))
+                }
+              </g>
+
+              <rect id="playhead" class="playhead" x="0" y="8" width={COL} height={HEIGHT - 16} visibility="hidden" />
+
+              <g id="claims">
+                {
+                  claims.map((c) => (
+                    <g class="claim" data-layer={c.layer} data-col={c.col}>
+                      <rect x={c.col * COL + 3} y={LAYERS[c.layer].y + 3} width={COL - 6} height={LAYERS[c.layer].height - 6} />
+                      <text x={c.col * COL + COL / 2} y={LAYERS[c.layer].y + LAYERS[c.layer].height / 2}>
+                        <tspan x={c.col * COL + COL / 2} dy="-0.6em">someone is</tspan>
+                        <tspan x={c.col * COL + COL / 2} dy="1.2em">drawing here</tspan>
+                      </text>
+                    </g>
+                  ))
+                }
+              </g>
+
+              {
+                layers.map((layer) => (
+                  <g id={`marks-${layer}`}>
+                    {grid
+                      .filter((s) => INSTRUMENTS[s.instrument as Instrument].layer === layer)
+                      .map((s) => (
+                        <g class={`mark i-${s.instrument}`} data-id={s.id} data-instrument={s.instrument} data-col={s.col}>
+                          <path d={s.d} class="ink-soft" stroke-width={s.width * SOFT_SPREAD} />
+                          <path d={s.d} class="ink" stroke-width={s.width} />
+                        </g>
+                      ))}
+                  </g>
+                ))
+              }
+
+              {
+                layers.map((layer) => (
+                  <g class={`zone zone-${layer}`} data-layer={layer}>
+                    <rect
+                      class="zone-outline"
+                      x={open[layer] * COL + 4}
+                      y={LAYERS[layer].y + 4}
+                      width={COL - 8}
+                      height={LAYERS[layer].height - 8}
+                    />
+                    <text class="zone-prompt" x={open[layer] * COL + COL / 2} y={LAYERS[layer].y + LAYERS[layer].height / 2}>
+                      draw here
+                    </text>
+                    <path class="preview ink" d="" />
+                    <rect
+                      class="zone-hit"
+                      x={open[layer] * COL}
+                      y={LAYERS[layer].y}
+                      width={COL}
+                      height={LAYERS[layer].height}
+                      tabindex="0"
+                      role="button"
+                      aria-label={
+                        layer === "top"
+                          ? "Melodic grid, open column: drag to draw a note with the chosen instrument (height is pitch), or press Enter or Space for a short note"
+                          : "Percussive grid, open column: drag to draw a beat pattern with the chosen kit, or press Enter or Space for a single hit"
+                      }
+                    />
+                  </g>
+                ))
+              }
+            </svg>
+          </div>
+        </div>
+        </div>
+      </div>
+
+      <div class="controls">
+        {
+          layers.map((layer) => (
+            <fieldset class="instruments" data-layer={layer}>
+              <legend>{layer === "top" ? "Top grid, melodic: height is pitch" : "Bottom grid, percussive: high, middle or low hit"}</legend>
+              {byLayer(layer).map((key, i) => (
+                <label class={`i-${key}`}>
+                  <input type="radio" name={`instrument-${layer}`} value={key} checked={i === 0} />
+                  <span class="swatch" aria-hidden="true" />
+                  {INSTRUMENTS[key].label}
+                </label>
+              ))}
+            </fieldset>
+          ))
+        }
+
+        <div class="transport" hidden>
+          <button type="button" id="play" aria-pressed="false">Play</button>
+          <label>
+            Playhead at column <output id="playhead-label">1</output>
+            <input type="range" id="playhead-pos" min="0" max={Math.max(0, columns - 1)} value="0" step="1" />
+          </label>
+        </div>
       </div>
 
       <p id="status" class="status" aria-live="polite">
-        {count === 0
-          ? "Nobody has drawn yet. The blank strip at the right is where you go first."
-          : `${count} mark${count === 1 ? "" : "s"} so far, since ${since}.`}
+        {grid.length === 0
+          ? "Nobody has drawn in the grid yet. Pick an instrument and take the first column."
+          : `${grid.length} mark${grid.length === 1 ? "" : "s"} in the grid so far, since ${since}.`}
       </p>
+
+      {
+        prologue.length > 0 && (
+          <figure class="prologue">
+            <svg
+              viewBox={`${PROLOGUE_START} 0 ${prologueWidth} 480`}
+              role="img"
+              aria-label={`The first ${prologue.length} marks, from before the scroll became a music box. They stay as they were drawn, and don't play.`}
+            >
+              <rect class="paper" x={PROLOGUE_START} y="0" width={prologueWidth} height="480" />
+              {prologue.map((s) => (
+                <>
+                  <path d={s.d} class="ink-soft" stroke-width={s.width * SOFT_SPREAD} />
+                  <path d={s.d} class="ink" stroke-width={s.width} />
+                </>
+              ))}
+            </svg>
+            <figcaption>
+              Before the grid: the {prologue.length} marks left on the continuous scroll this grew from. Kept
+              exactly as drawn, and silent.
+            </figcaption>
+          </figure>
+        )
+      }
     </main>
 
     <script>
+      import { initBox } from "../lib/box";
       import { initDrawing } from "../lib/draw";
+      import { initPlayback } from "../lib/playback";
 
-      initDrawing(document);
-
-      const wrap = document.getElementById("canvas-wrap");
-      if (wrap) wrap.scrollLeft = wrap.scrollWidth;
+      const box = initBox(document);
+      if (box) {
+        initDrawing(box);
+        initPlayback(box);
+      }
     </script>
   </body>
 </html>

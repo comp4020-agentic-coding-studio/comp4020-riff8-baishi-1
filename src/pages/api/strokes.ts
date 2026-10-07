@@ -1,72 +1,75 @@
 import type { APIRoute } from "astro";
-import { addStroke, countStrokes, MAX_D_LENGTH, MAX_WIDTH, MIN_WIDTH } from "../../lib/db";
-import { zoneBounds } from "../../lib/layout";
+import { claimedByOthers, holder, release, TOKEN } from "../../lib/claims";
+import { addStroke, MAX_D_LENGTH, MAX_WIDTH, MIN_WIDTH, occupiedColumns } from "../../lib/db";
+import { columnAt, isInstrument, layerOf, pathPoints, zoneBounds } from "../../lib/layout";
+import { publish } from "../../lib/live";
 
-// Every point a path names, control points included, or null if it isn't the
-// one shape draw.ts emits: a moveto, then any run of L and Q segments. A
-// quadratic curve never leaves the hull of its control points, so bounding
-// these bounds the ink.
-function pathPoints(d: string): { x: number; y: number }[] | null {
-  const tokens = d.trim().split(/\s+/);
-  const arity: Record<string, number> = { M: 2, L: 2, Q: 4 };
-  const points: { x: number; y: number }[] = [];
-  for (let i = 0; i < tokens.length; ) {
-    const command = tokens[i];
-    const n = arity[command];
-    if (n === undefined || (command === "M") !== (i === 0)) return null;
-    const args = tokens.slice(i + 1, i + 1 + n).map(Number);
-    if (args.length !== n || !args.every(Number.isFinite)) return null;
-    for (let j = 0; j < n; j += 2) points.push({ x: args[j], y: args[j + 1] });
-    i += 1 + n;
-  }
-  return points;
-}
+const REACH_AHEAD = 8;
 
-// The only write path into the scroll. Validated here, not just trusted
-// from the client — see CLAUDE.md's rule that the data layer is the one
-// place these promises actually hold.
+const refuse = (status: number, message: string): Response => new Response(message, { status });
+
+// The only write path into the grid. Validated here, not just trusted from
+// the client — see CLAUDE.md's rule that the data layer is the one place
+// these promises actually hold.
 export const POST: APIRoute = async ({ request }) => {
   let body: unknown;
   try {
     body = await request.json();
   } catch {
-    return new Response("expected a JSON body", { status: 400 });
+    return refuse(400, "expected a JSON body");
   }
 
-  if (
-    typeof body !== "object" ||
-    body === null ||
-    typeof (body as Record<string, unknown>).d !== "string" ||
-    typeof (body as Record<string, unknown>).width !== "number"
-  ) {
-    return new Response('expected { "d": string, "width": number }', { status: 400 });
+  const { d, width, instrument, token } = (body ?? {}) as Record<string, unknown>;
+  if (typeof d !== "string" || typeof width !== "number") {
+    return refuse(400, 'expected { "d": string, "width": number, "instrument": string }');
   }
-
-  const { d, width } = body as { d: string; width: number };
-
+  if (!isInstrument(instrument)) {
+    return refuse(400, "instrument must be one of the eight on the page");
+  }
   if (d.length === 0 || d.length > MAX_D_LENGTH) {
-    return new Response("stroke path is empty or too long", { status: 400 });
+    return refuse(400, "stroke path is empty or too long");
   }
   if (!Number.isFinite(width) || width < MIN_WIDTH || width > MAX_WIDTH) {
-    return new Response("stroke width out of range", { status: 400 });
+    return refuse(400, "stroke width out of range");
   }
-
   const points = pathPoints(d);
   if (points === null) {
-    return new Response("stroke path must be M, then L and Q segments only", { status: 400 });
+    return refuse(400, "stroke path must be M, then L and Q segments only");
   }
 
-  // A mark painted outside its own blank strip would cover someone else's:
-  // erasing by other means. Nothing awaits between this check and the
+  // The layer is the server's to decide, from the instrument alone; anything
+  // else the body says about it is ignored.
+  const layer = layerOf(instrument);
+  const col = columnAt(points[0].x);
+  const mine = typeof token === "string" && TOKEN.test(token) ? token : null;
+
+  // A mark painted outside its own column would cover someone else's:
+  // erasing by other means. Nothing awaits between these checks and the
   // insert, so no other write can land in between.
-  const { minX, maxX, minY, maxY } = zoneBounds(countStrokes(), width);
-  if (!points.every((p) => p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY)) {
-    return new Response("stroke reaches outside the blank strip at the end of the scroll", {
-      status: 409,
-    });
+  const { minX, maxX, minY, maxY } = zoneBounds(layer, col, width);
+  if (col < 0 || !points.every((p) => p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY)) {
+    return refuse(409, "stroke reaches outside its own column in its own layer");
   }
 
-  const stroke = addStroke(d, width);
+  const occupied = occupiedColumns()[layer];
+  if (occupied.has(col)) {
+    return refuse(409, "that column already has a mark");
+  }
+  const held = holder(layer, col);
+  if (held !== null && held !== mine) {
+    return refuse(409, "someone is drawing in that column");
+  }
+  // A free column is anyone's, claim or no claim (an expired claim is no
+  // claim at all), but not one so far out it would stretch the grid: no
+  // further than REACH_AHEAD past the furthest mark or claim in the layer.
+  const furthest = Math.max(-1, ...occupied, ...claimedByOthers(layer, null));
+  if (col > furthest + REACH_AHEAD) {
+    return refuse(409, "that column is too far past the end of the grid");
+  }
+
+  const stroke = addStroke(d, width, instrument, col);
+  release(layer, col);
+  publish({ event: "stroke", data: stroke, id: stroke.id });
   return new Response(JSON.stringify(stroke), {
     status: 201,
     headers: { "content-type": "application/json" },
