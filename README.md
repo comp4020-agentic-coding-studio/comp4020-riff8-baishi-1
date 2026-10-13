@@ -1,90 +1,68 @@
-# The Endless Music Box
+# Plenty
 
-A shared music box drawn on a crumpled sheet of paper. Two grids share the
-same columns: the top one is melodic, with eight pitch rows, and the bottom
-one is percussive. A column is one beat in both. Pick an instrument, draw
-one mark in a grid's open column, and it's part of the music from then on.
-Nobody can undo it, including you. Press play and a playhead walks the
-columns one beat at a time, and the sound blasts out of a big brass trumpet
-at the side of the sheet.
+A cosy multiplayer game about having enough, and never stopping.
 
-It began as The Scroll, a single strip of ink that only grew. Its first
-marks are still there, kept exactly as drawn under the grid, and silent.
+You and up to seven friends arrive on a little meadow island: a pond with a heron, a few groves, an old oak, a hill for picnics. You gather timber and stone by hand, build cottages, power them, and teach a datacentre to do the gathering for you. It works beautifully. When the island is used up, the Plenty Cooperative has another world ready: Mars, then the Sun itself, then the whole Solar System, then the Universe. There is no sixth.
 
-## What good means here
+The game is built from a pod's brief, _Consume the Universe_: let players enjoy building the machine, then notice what the machine has consumed.
 
-Good, for this app, still means **small on purpose**: one shared surface,
-one SQLite file, one small machine, nothing that scales past what those can
-hold. Three things I read while deciding what that should look like:
+## How to play
 
-- Robin Sloan's
-  [_An app can be a home-cooked meal_](https://www.robinsloan.com/notes/home-cooked-app/)
-  argues that software built for a small, known use doesn't need accounts,
-  growth or retention. The music box has no login and no notion of "your"
-  marks once they're made.
-- Ben Hoyt's [_The small web is beautiful_](https://benhoyt.com/writings/the-small-web-is-beautiful/)
-  argues for fewer moving parts as a virtue in itself. Real-time arrives
-  without a second service: the same Node process that saves a mark streams
-  it to every open tab.
-- Hundred Rabbits'
-  [description of their own practice](https://sourcehut.org/blog/2021-12-08-100-rabbits-interview/) —
-  "if we can use less technology to solve any one task, we will" — is why
-  every sound is synthesized in the browser rather than fetched from a
-  sample library, and why how a mark sounds is read off the shape already
-  saved rather than stored beside it.
+Start a world from the front page and send the invite link (or the five-letter room code) to friends. No account: your browser remembers who you are in each room.
 
-## How a mark sounds
+- **Walk** with WASD or the arrow keys. Zoom with the wheel or `+`/`-`.
+- **Harvest** by holding `E` (or `Space`) near a tree, rock or pond, or by clicking it. Everything goes into the room's shared stockpile.
+- **Build** with `1`--`6`. A ghost shows the footprint, green where it fits and red with the reason where it doesn't. Click to place it, or press `Enter` for the tile you're facing. `Esc` cancels.
+- **Help raise** a building site by pressing `E` beside it: several people building together finish faster.
+- `I` inspects a building (what it needs, what it makes, why it's idle), `X` takes one down for half its cost back, `N` names a favourite place, `V` surveys every deposit left, `P` saves a photo, and `Shift`+`1`--`6` emotes.
+- `H` opens help in the game.
 
-Colour chooses the instrument: Piano, Strings, Flute, Bass or Synth in the
-top grid, Drum Kit, Electronic Beat or a vocal chop in the bottom. Height in
-the top grid is pitch. The shape decides the rest. A dot is a short,
-staccato note and a long horizontal stroke is held. A rising line rises in
-pitch and a falling one falls. A zigzag trills, and a loop repeats inside
-its beat. In the bottom grid a dot is one hit, a long stroke a run of hits
-across the beat, a zigzag a roll, and how high each part is drawn picks
-kick, snare or hi-hat.
+Start with the Cooperative memo in the corner: gather, build cottages, power them, build a datacentre, put a harvester beside a grove. The stockpile panel tells you what most of your idle machines are waiting for.
 
-## All at once
+A world moves on when every deposit on it is gone, for everyone at once. The survey arrow points at the nearest remaining deposit, so the last few never turn into a hunt.
 
-When anyone saves a mark, every other open tab sees it land within about a
-second, no reload. When someone presses down in a grid's open column, that
-column is theirs while they draw: every other tab sees it hatched as
-"someone is drawing here" and is offered the next column instead, so six
-people drawing at once all keep their marks. A claim is let go when the
-mark saves, or after ten seconds of silence if the drawer walks away. The
-reasoning, and the case for the alternatives, is in
-[`docs/decisions/0001-who-gets-the-column.md`](docs/decisions/0001-who-gets-the-column.md).
+## The five worlds
 
-## What's enforced, and what's judged
+| World | What you consume | What's different |
+| --- | --- | --- |
+| Earth | timber, stone, fresh water | Furnaces are strong, but their smoke kills groves and browns the land. Sun Gardens are clean and slow. |
+| Mars | regolith, iron, buried ice | Nothing runs outside a dome's air, and domes drink the same ice your datacentres need. |
+| The Sun | plasma, magnetics, shade | Collectors pour in power and heat; past the limit, scoops throttle until radiators shed it. The star dims as you take it. |
+| The Solar System | volatiles, asteroid metal, comet ice | No sunlight now. Every machine draws on the Bottled Sun you saved, and it doesn't refill. Miners only ship if relays link them to the Depot. |
+| The Universe | starlight, stellar cores, dark cold | Your spent worlds run as World Engines. The host can render one down for a burst of energy, forever. And if everyone here agrees, you can stop, and leave the rest alone. |
 
-What's **enforced**, on the server: a mark, once saved, is never edited or
-deleted, and nor can a later one paint over it, since every mark has to stay
-inside its own column of its own layer, soft edge and all. The server
-decides the layer from the instrument; a client can't say otherwise. A
-column someone else has claimed can't be saved into. The page that shows the
-grid works without JavaScript, and drawing doesn't need a pointer: each open
-column is a real control, and Enter or Space leaves a dot. All of this is
-checked over HTTP in `spec/`.
+Spent Earth and Mars float in the Solar System as grey remnants, and the Solar System sits in a corner of the Universe. Nothing you've finished comes back fresh.
 
-What's **judged, not enforced**: nothing stops a visitor drawing a second
-mark, or a tenth. Enforcing "one mark per person" needs a real notion of a
-person, which this app deliberately doesn't have; an anonymous per-tab token
-says who holds a claim, and nothing more. The music box trusts you the way a
-paper one would.
+## What the game is arguing
 
-## The look
+Every convenience has a dependency. A datacentre gives you compute, which runs harvesters, which empty the land faster, which needs more power, which on Earth means furnaces, whose smoke burns the groves you were going to harvest anyway. The game never stops you and never lectures you. It shows the cost in the land (grass browns, trees become stumps, the pond shrinks to mud, the birds thin out and the birdsong with them) and it keeps a short archive of every named place and what became of it. The ending reads that archive back to you.
 
-The sheet is crumpled now: creased and lit unevenly, with a battered edge,
-like paper that's been carried around in a pocket. Ink-wash painting
-tolerates the mark that goes wrong, and so does a scrunched-up sheet; neither
-pretends to be pristine. The crumple is only how the paper is drawn. Every
-mark is saved and checked in flat coordinates, and the trumpet and the
-creases are decoration, hidden from assistive tech.
+The design document, [`docs/DESIGN.md`](docs/DESIGN.md), covers the economy, pacing, stages and ending in detail.
 
-## What I deliberately didn't build
+## How it works
 
-The playhead is yours alone: pressing play starts it for you, not for the
-room. A shared playhead is a bigger decision (whose tempo, who can stop it)
-than this round should make in passing. Also not here: accounts, undo,
-moderation, likes, a gallery of past sheets, or anything needing a second
-service.
+One Node process on Fly.io owns every room's simulation and speaks WebSocket; browsers render the world and send intentions (move, harvest, build). The browser app is Next.js, exported to static files that the same process serves, with the world drawn on a Canvas 2D in its own frame loop. Rooms persist as snapshots in SQLite on the Fly volume.
+
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): the stack, the protocol, authority, persistence, deployment and recovery
+- [`docs/DECISIONS.md`](docs/DECISIONS.md): the decision log, including the creative directions weighed at the start
+- [`docs/adr/0001-empty-rooms-pause.md`](docs/adr/0001-empty-rooms-pause.md): what a player finds when they come back
+- [`docs/TESTING.md`](docs/TESTING.md): what was tested, how, and what was measured
+- [`docs/ASSETS.md`](docs/ASSETS.md): where every picture and sound comes from, and how to replace them
+
+## Running it
+
+You need the versions in `mise.toml` (Node 24, pnpm 11).
+
+```sh
+pnpm install
+pnpm build          # Next.js shell -> out/
+pnpm start          # game server on :8080 (PORT and DATA_DIR override)
+```
+
+Then open <http://localhost:8080>. `pnpm check` typechecks and runs the spec against the running server (set `APP_URL` if it isn't on :8080). `node scripts/playbot.ts <ROOM> [url] [name]` joins a room with a bot that plays it, which is the quickest way to see later stages or fill a room.
+
+The rapid preset (a button on the front page) runs the same rules with the economy five times faster and a hand harvest worth ten. A solo campaign takes about ten minutes on it.
+
+## Known limits
+
+Desktop browsers with a keyboard first; it renders on a phone but isn't playable there. One server process and one Fly machine host every room, so a deploy or crash pauses all rooms for a few seconds and can roll back up to five seconds of play. There's no text chat by design (emotes only), so moderation is limited to the host taking down buildings. The full list, and what to build next, is in [`docs/TESTING.md`](docs/TESTING.md).

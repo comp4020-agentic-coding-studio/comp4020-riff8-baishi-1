@@ -1,29 +1,29 @@
 # syntax = docker/dockerfile:1
 
-# Node version pinned to match mise.toml. better-sqlite3@13 ships a
-# prebuilt N-API binary for linux-x64 directly in the package (no
-# node-gyp, no prebuild-install network fetch, no install/postinstall
-# script at all — confirmed by inspecting the installed package) and
-# N-API is ABI-stable across Node versions, so there's no native
-# toolchain this image ever needs.
-FROM node:24.21.0-slim AS base
-RUN corepack enable
-WORKDIR /app
+# Plenty: build the Next.js shell to static files, then run one Node process
+# (server/main.ts, type-stripped TypeScript) that serves them, owns every
+# room's simulation and speaks WebSocket at /ws. node:sqlite on the /data
+# volume, so there's no native module to compile. Versions follow mise.toml.
 
-FROM base AS build
+FROM node:24.21.0-alpine AS build
+WORKDIR /app
+RUN corepack enable && corepack prepare pnpm@11.9.0 --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
-COPY . .
-RUN pnpm build
+COPY next.config.ts tsconfig.json ./
+COPY app/ ./app/
+COPY client/ ./client/
+COPY shared/ ./shared/
+RUN NEXT_TELEMETRY_DISABLED=1 pnpm build
 
-FROM base AS runtime
-ENV NODE_ENV=production
+FROM node:24.21.0-alpine
+WORKDIR /app
+RUN corepack enable && corepack prepare pnpm@11.9.0 --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-RUN pnpm install --frozen-lockfile --prod
-COPY --from=build /app/dist ./dist
-COPY README.md ./README.md
-
-ENV HOST=0.0.0.0
-ENV DB_PATH=/data/scroll.db
-EXPOSE 8080
-CMD ["node", "./dist/server/entry.mjs"]
+RUN pnpm install --prod --frozen-lockfile
+COPY server/ ./server/
+COPY shared/ ./shared/
+COPY --from=build /app/out ./out
+COPY README.md ./
+ENV DATA_DIR=/data NODE_ENV=production
+CMD ["node", "server/main.ts"]
