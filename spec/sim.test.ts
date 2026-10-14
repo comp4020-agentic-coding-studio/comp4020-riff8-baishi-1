@@ -460,6 +460,7 @@ describe("the Dyson Sphere", () => {
     toSun(s, ch);
     s.inventory = { matter: 200, mineral: 200, coolant: 200 };
     s.sustain = BUILDINGS.dyson.sustainRequired!;
+    const reserveBeforeDyson = s.reserve;
     const [x, y] = freeTile(s, 2);
     expect(applyCommand(s, "a", id(), s.gen, { k: "build", x, y, type: "dyson" }, ch).ok).toBe(true);
     for (let i = 0; i < 400; i++) {
@@ -468,6 +469,8 @@ describe("the Dyson Sphere", () => {
       if (d?.status === "ok") break;
     }
     expect(s.buildings.find((b) => b.type === "dyson")!.status).toBe("ok");
+    // the Dyson Sphere banks its yield every tick it runs, not just once it's complete
+    expect(s.reserve).toBeGreaterThan(reserveBeforeDyson);
     const reserveBefore = s.reserve;
     expect(totalRemaining(s)).toBeGreaterThan(0);
     const stageBefore = s.stage;
@@ -475,7 +478,10 @@ describe("the Dyson Sphere", () => {
     expect(s.phase.k).toBe("play");
     expect(applyCommand(s, "b", id(), s.gen, { k: "stop", on: true }, ch)).toEqual({ ok: true });
     expect(s.phase.k).toBe("transition");
-    expect(s.reserve).toBeGreaterThan(reserveBefore);
+    // the vote itself doesn't advance simulated time, so the yield banked so far
+    // is at least what it was; the Sun's leftover-plasma conversion still runs on
+    // top once nextStage fires, below
+    expect(s.reserve).toBeGreaterThanOrEqual(reserveBefore);
     expect(ledgerHolds(s)).toBe(true);
     while (s.phase.k === "transition") tick(s, ch);
     expect(s.stage).toBe(stageBefore + 1);

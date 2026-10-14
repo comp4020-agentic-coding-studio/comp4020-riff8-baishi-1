@@ -104,7 +104,7 @@ export function weather(seed: number, stageIndex: number, econTicks: number): { 
 }
 
 /** the integer multiplier a sustained run of clean power earns, bounded so output stays whole-number */
-export const sustainMultiplier = (sustain: number): number => Math.min(SUSTAIN_MAX_MULTIPLIER, 1 + Math.floor(sustain / SUSTAIN_TICKS_PER_LEVEL));
+export const sustainMultiplier = (sustain: number): number => Math.min(SUSTAIN_MAX_MULTIPLIER, 1 + Math.floor(Math.max(0, sustain) / SUSTAIN_TICKS_PER_LEVEL));
 
 export function createRoom(code: string, seed: number, pace: Pace): RoomState {
   const g = generateStage(seed, 0);
