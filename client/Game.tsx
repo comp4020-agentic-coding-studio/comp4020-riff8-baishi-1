@@ -336,6 +336,9 @@ export default function Game({ room, name }: { room: string; name: string }): Re
             <Economy s={s} />
             {st.id === "earth" && s.phase.k === "play" && <Memo s={s} />}
           {st.id === "universe" && s.phase.k === "play" && <LastFrontier s={s} you={client.you} onVote={(on) => client.send({ k: "stop", on })} />}
+          {st.id === "sun" && s.phase.k === "play" && s.buildings.some((b) => b.type === "dyson" && b.status === "ok") && (
+            <DysonVote s={s} you={client.you} onVote={(on) => client.send({ k: "stop", on })} />
+          )}
           </div>
           <RoomPanel s={s} client={client} host={host} />
           <BuildBar s={s} view={view} onPick={chooseBuild} onTool={setTool} />

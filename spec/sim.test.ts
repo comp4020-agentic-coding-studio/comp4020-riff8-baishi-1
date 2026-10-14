@@ -1,7 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { BUILDINGS, FAMILIES, STAGES } from "../shared/content.ts";
+import { BUILDINGS, FAMILIES, STAGES, SUSTAIN_MAX_MULTIPLIER, SUSTAIN_TICKS_PER_LEVEL } from "../shared/content.ts";
 import type { RoomState } from "../shared/protocol.ts";
-import { applyCommand, createRoom, join, leave, ledgerHolds, newChanges, tick, totalRemaining, bundleOk, type Changes } from "../shared/sim.ts";
+import {
+  applyCommand,
+  createRoom,
+  join,
+  leave,
+  ledgerHolds,
+  newChanges,
+  placementProblem,
+  sustainMultiplier,
+  tick,
+  totalRemaining,
+  bundleOk,
+  weather,
+  type Changes,
+} from "../shared/sim.ts";
 
 // The authoritative simulation, exercised directly: no browser, no socket.
 
@@ -354,5 +368,117 @@ describe("stage transitions", () => {
     expect(restored.reserve).toBe(s.history.at(-1)!.ledger.matter.extracted * 4);
     expect(JSON.stringify(restored.tiles)).toBe(JSON.stringify(s.tiles));
     expect(restored.history).toHaveLength(3);
+  });
+});
+
+describe("renewables: weather, sustain, batteries", () => {
+  it("stays within [0, 1] across a spread of seeds, stages and ticks", () => {
+    for (let seed = 0; seed < 20; seed++)
+      for (let stageIndex = 0; stageIndex < STAGES.length; stageIndex++)
+        for (let t = 0; t < 500; t += 37) {
+          const { wind, solar } = weather(seed * 101 + 3, stageIndex, t);
+          expect(wind).toBeGreaterThanOrEqual(0);
+          expect(wind).toBeLessThanOrEqual(1);
+          expect(solar).toBeGreaterThanOrEqual(0);
+          expect(solar).toBeLessThanOrEqual(1);
+        }
+  });
+
+  it("the sustain multiplier is a bounded, non-decreasing integer", () => {
+    expect(sustainMultiplier(0)).toBe(1);
+    expect(sustainMultiplier(-5)).toBe(1);
+    expect(sustainMultiplier(SUSTAIN_TICKS_PER_LEVEL)).toBe(2);
+    expect(sustainMultiplier(SUSTAIN_TICKS_PER_LEVEL * 1000)).toBe(SUSTAIN_MAX_MULTIPLIER);
+    let prev = 0;
+    for (let s = 0; s < SUSTAIN_TICKS_PER_LEVEL * (SUSTAIN_MAX_MULTIPLIER + 2); s += 5) {
+      const m = sustainMultiplier(s);
+      expect(m).toBeGreaterThanOrEqual(prev);
+      expect(Number.isInteger(m)).toBe(true);
+      prev = m;
+    }
+  });
+
+  it("resets the sustain streak the instant a furnace fires, and climbs while running clean", () => {
+    const { s, ch } = room("rapid");
+    s.inventory = { matter: 200, mineral: 200, coolant: 200 };
+    const [cx, cy] = freeTile(s, 2);
+    expect(applyCommand(s, "a", id(), s.gen, { k: "build", x: cx, y: cy, type: "city" }, ch).ok).toBe(true);
+    const [wx, wy] = freeTile(s, 1);
+    expect(applyCommand(s, "a", id(), s.gen, { k: "build", x: wx, y: wy, type: "wind" }, ch).ok).toBe(true);
+    for (let i = 0; i < 400; i++) tick(s, ch);
+    expect(s.sustain).toBeGreaterThan(0);
+    const [fx, fy] = freeTile(s, 1);
+    expect(applyCommand(s, "a", id(), s.gen, { k: "build", x: fx, y: fy, type: "furnace" }, ch).ok).toBe(true);
+    for (let i = 0; i < 400; i++) {
+      tick(s, ch);
+      if (s.buildings.find((b) => b.type === "furnace")!.status === "ok") break;
+    }
+    expect(s.buildings.find((b) => b.type === "furnace")!.status).toBe("ok");
+    expect(s.sustain).toBe(0);
+  });
+
+  it("a battery banks surplus power and spends it back through a shortfall", () => {
+    const { s, ch } = room("rapid");
+    s.inventory = { matter: 200, mineral: 200, coolant: 200 };
+    const [wx, wy] = freeTile(s, 1);
+    expect(applyCommand(s, "a", id(), s.gen, { k: "build", x: wx, y: wy, type: "wind" }, ch).ok).toBe(true);
+    const [bx, by] = freeTile(s, 1);
+    expect(applyCommand(s, "a", id(), s.gen, { k: "build", x: bx, y: by, type: "battery" }, ch).ok).toBe(true);
+    for (let i = 0; i < 100; i++) tick(s, ch);
+    expect(s.buildings.find((b) => b.type === "battery")!.status).toBe("ok");
+    // run long enough to see at least one tick where the battery holds charge
+    let sawCharge = false;
+    for (let i = 0; i < 2000 && !sawCharge; i++) {
+      tick(s, ch);
+      if (s.batteryCharge > 0) sawCharge = true;
+    }
+    expect(sawCharge).toBe(true);
+    expect(s.batteryCharge).toBeLessThanOrEqual(BUILDINGS.battery.batteryCapacity!);
+  });
+});
+
+describe("the Dyson Sphere", () => {
+  const toSun = (s: RoomState, ch: Changes): void => {
+    while (STAGES[s.stage].id !== "sun" || s.phase.k !== "play") {
+      if (s.phase.k === "play") harvestBot(s, ch, "a");
+      tick(s, ch);
+    }
+  };
+
+  it("refuses placement before the sustain threshold, and allows it after", () => {
+    const { s, ch } = room("rapid");
+    toSun(s, ch);
+    s.inventory = { matter: 200, mineral: 200, coolant: 200 };
+    const [x, y] = freeTile(s, 2);
+    expect(placementProblem(s, "dyson", x, y)).toMatch(/sustainable ticks/);
+    s.sustain = BUILDINGS.dyson.sustainRequired!;
+    expect(placementProblem(s, "dyson", x, y)).toBeNull();
+  });
+
+  it("lets a unanimous vote leave the Sun lit once a Dyson Sphere runs, banking its yield and keeping the books", () => {
+    const { s, ch } = room("rapid", ["a", "b"]);
+    toSun(s, ch);
+    s.inventory = { matter: 200, mineral: 200, coolant: 200 };
+    s.sustain = BUILDINGS.dyson.sustainRequired!;
+    const [x, y] = freeTile(s, 2);
+    expect(applyCommand(s, "a", id(), s.gen, { k: "build", x, y, type: "dyson" }, ch).ok).toBe(true);
+    for (let i = 0; i < 400; i++) {
+      tick(s, ch);
+      const d = s.buildings.find((b) => b.type === "dyson");
+      if (d?.status === "ok") break;
+    }
+    expect(s.buildings.find((b) => b.type === "dyson")!.status).toBe("ok");
+    const reserveBefore = s.reserve;
+    expect(totalRemaining(s)).toBeGreaterThan(0);
+    const stageBefore = s.stage;
+    expect(applyCommand(s, "a", id(), s.gen, { k: "stop", on: true }, ch)).toEqual({ ok: true });
+    expect(s.phase.k).toBe("play");
+    expect(applyCommand(s, "b", id(), s.gen, { k: "stop", on: true }, ch)).toEqual({ ok: true });
+    expect(s.phase.k).toBe("transition");
+    expect(s.reserve).toBeGreaterThan(reserveBefore);
+    expect(ledgerHolds(s)).toBe(true);
+    while (s.phase.k === "transition") tick(s, ch);
+    expect(s.stage).toBe(stageBefore + 1);
+    expect(STAGES[s.stage].id).toBe("system");
   });
 });
